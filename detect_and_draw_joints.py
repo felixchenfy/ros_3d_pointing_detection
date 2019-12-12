@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from calc_3d_dist import point_3d_line_distance, point_plane_distance
 import numpy as np
 import cv2
 import rospy
@@ -13,6 +14,7 @@ if True:  # Add project root
     import sys
     import os
     ROOT = os.path.dirname(os.path.abspath(__file__))+'/'
+
 
 if True:  # Import scripts from another ROS repo.
     sys.path.append("/home/feiyu/catkin_ws/src/ros_openpose_rgbd")
@@ -27,6 +29,8 @@ if True:  # Import scripts from another ROS repo.
 ARM_STRETCH_ANGLE_THRESH = 45.0  # Degrees
 VIZ_ID0 = 10000000
 VIZ_ID_RAY = 10000001
+VIZ_ID_HIT_POINT = 10000002
+
 ''' ------------------------------ Command line inputs ------------------------------------ '''
 
 
@@ -67,11 +71,11 @@ def parse_command_line_arguments():
     parser.add_argument("-d", "--base_folder",
                         default=ROOT)
     parser.add_argument("-e", "--folder_color",
-                        default="data/images_n60/color/")
+                        default="data/images_n76/color/")
     parser.add_argument("-f", "--folder_depth",
-                        default="data/images_n60/depth/")
+                        default="data/images_n76/depth/")
     parser.add_argument("-g", "--camera_info_file",
-                        default="data/images_n60/cam_params_realsense.json")
+                        default="data/images_n76/cam_params_realsense.json")
 
     # -- Get args.
     inputs = rospy.myargv()[1:]
@@ -195,10 +199,48 @@ def is_arm_stretched(
     p0, p1, p2 = arm_3_joints_xyz[0], arm_3_joints_xyz[1], arm_3_joints_xyz[2]
     vec1 = np.array(p1 - p0)
     vec2 = np.array(p2 - p1)
-    angle = np.arccos(vec1.dot(vec2)/(np.linalg.norm(vec1) * np.linalg.norm(vec2)))
+    angle = np.arccos(
+        vec1.dot(vec2)/(np.linalg.norm(vec1) * np.linalg.norm(vec2)))
     angle = angle / math.pi * 180.0
     is_stretched = np.abs(angle) <= angle_thresh
     return is_stretched
+
+
+def get_3d_ray_hit_point(
+    arm_3_joints_xyz, pcl_xyz,
+    thresh_close_to_line=0.1,  # <= this
+    thresh_in_front_of_hand=0.50,  # >= this
+):
+    ''' Get the hit point between the pointing ray and the point cloud.
+    Arguments:
+        arm_3_joints_xyz {np.ndarray}: (3, 3).
+            Three columns are x, y, z.
+        pcl_xyz {np.ndarray}: (N, 3)
+            Three columns are x, y, z.
+    Return:
+        ret {bool}
+        xyz {3d point}
+    '''
+    p0, p1, p2 = arm_3_joints_xyz[0], arm_3_joints_xyz[1], arm_3_joints_xyz[2]
+
+    # Select points that are close to the pointing direction.
+    dists_3d_line = point_3d_line_distance(pcl_xyz, p1, p2)
+    valid_pts = pcl_xyz[dists_3d_line <= thresh_close_to_line]
+    if valid_pts.size == 0:
+        return False, None
+
+    # Select points that are in the front of the hand.
+    dists_plane = point_plane_distance(valid_pts, p1, p2-p1)
+    valid_pts = valid_pts[dists_plane >= thresh_in_front_of_hand]
+    if valid_pts.size == 0:
+        return False, None
+
+    # Get center.
+    center = np.mean(valid_pts, axis=0)  # (3, )
+    return True, center
+
+
+''' ------------------------------ Rviz visualization ------------------------------------ '''
 
 
 def draw_pointing_ray(arm_3_joints_xyz, cam_pose,
@@ -212,11 +254,19 @@ def draw_pointing_ray(arm_3_joints_xyz, cam_pose,
 
 
 def delete_pointing_ray():
-   RvizMarker.delete_marker(VIZ_ID_RAY)
+    RvizMarker.delete_marker(VIZ_ID_RAY)
 
 
-def which_pixel_is_pointed(arm_3_joints_xyz, pcl_xyz):
-    pass
+def draw_hit_point(xyz, cam_pose):
+    RvizMarker.draw_dot(
+        VIZ_ID_HIT_POINT,
+        cam_to_world(xyz, cam_pose),
+        _color='y',
+        _size=0.3)
+
+
+def delete_hit_point():
+    RvizMarker.delete_marker(VIZ_ID_HIT_POINT)
 
 
 ''' ------------------------------ Main ------------------------------------ '''
@@ -272,7 +322,7 @@ def main(args):
 
         # -- Draw humans in rviz.
         humans = []
-        is_pointing = False
+        is_pointing, is_hit = False, False
         for i in range(N_people):
             human = Human(rgbd, body_joints[i], hand_joints[i])
 
@@ -283,7 +333,10 @@ def main(args):
                     arm_3_joints_xyz, angle_thresh=ARM_STRETCH_ANGLE_THRESH)
                 if is_pointing:
                     draw_pointing_ray(arm_3_joints_xyz, cam_pose)
-                    which_pixel_is_pointed(arm_3_joints_xyz, pcl_xyz)
+                    is_hit, xyz_hit = get_3d_ray_hit_point(
+                        arm_3_joints_xyz, pcl_xyz)
+                    if is_hit:
+                        draw_hit_point(xyz_hit, cam_pose)
 
             # Print info.
             rospy.loginfo("  Drawing {}/{}th person with id={} on rviz.".format(
@@ -292,14 +345,19 @@ def main(args):
             humans.append(human)
 
             break  # Only process one human!!! (TODO: Remove this.)
+
+        # -- Delete markers.
         if not is_pointing:
             delete_pointing_ray()
-            
-        prev_humans = humans
+        if not is_hit:
+            delete_hit_point()
+
+        # -- Print results.
         print("Total time = {} seconds.".format(time.time()-t0))
 
         # -- Keep update camera pose for rviz visualization.
         cam_pose_pub.publish()
+        prev_humans = humans
 
         # -- Reset data.
         if args.data_source == "disk" and ith_image == total_images:
