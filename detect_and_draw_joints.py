@@ -22,6 +22,7 @@ if True:  # Import scripts from another ROS repo.
     from lib_openpose_detector import OpenposeDetector
     from utils.lib_rgbd import RgbdImage, MyCameraInfo
     from utils.lib_ros_rgbd_pub_and_sub import ColorImageSubscriber, DepthImageSubscriber, CameraInfoSubscriber
+    from utils.lib_ros_rgbd_pub_and_sub import ColorImagePublisher
     from utils.lib_geo_trans import rotx, roty, rotz, get_Rp_from_T, form_T
     from utils.lib_rviz_marker import RvizMarker
 
@@ -30,6 +31,7 @@ ARM_STRETCH_ANGLE_THRESH = 45.0  # Degrees
 VIZ_ID0 = 10000000
 VIZ_ID_RAY = 10000001
 VIZ_ID_HIT_POINT = 10000002
+TOPIC_RES_IMAGE = "3d_pointing/res_image"
 
 ''' ------------------------------ Command line inputs ------------------------------------ '''
 
@@ -189,6 +191,19 @@ def cam_to_world(xyz_in_camera, camera_pose):
     return xyz_in_world
 
 
+def cam2pixel(xyz_in_camera, camera_intrinsics):
+    ''' Project points represented in camera coordinate onto the image plane.
+    Arguments:
+        pts {np.ndarray}: (3, ).
+        camera_intrinsics {np.ndarray}: 3x3.
+    Return:
+        image_points_xy {np.ndarray, np.float32}: (2, )
+    '''
+    pt_3d_on_cam_plane = xyz_in_camera/xyz_in_camera[2]  # z=1
+    image_points_xy = camera_intrinsics.dot(pt_3d_on_cam_plane)[0:2]
+    return image_points_xy
+
+
 ''' ------------------------------ 3D pointing detection ------------------------------------ '''
 
 
@@ -257,7 +272,7 @@ def delete_pointing_ray():
     RvizMarker.delete_marker(VIZ_ID_RAY)
 
 
-def draw_hit_point(xyz, cam_pose):
+def draw_3d_hit_point(xyz, cam_pose):
     RvizMarker.draw_dot(
         VIZ_ID_HIT_POINT,
         cam_to_world(xyz, cam_pose),
@@ -267,6 +282,22 @@ def draw_hit_point(xyz, cam_pose):
 
 def delete_hit_point():
     RvizMarker.delete_marker(VIZ_ID_HIT_POINT)
+
+
+''' ------------------------------ 2D image drawer ------------------------------------ '''
+
+
+def draw_2d_hit_point(xyz_hit, intrin_mat, img_disp,
+                      xyz_hand=None,
+                      dot_radius=5, color=[0, 0, 255]):
+    xy1 = cam2pixel(xyz_hit, intrin_mat)
+    vu1 = tuple(int(v) for v in xy1)
+    cv2.circle(img_disp, vu1,
+               radius=dot_radius, color=color, thickness=-1)
+    if xyz_hand is not None:
+        xy0 = cam2pixel(xyz_hand, intrin_mat)
+        vu0 = tuple(int(v) for v in xy0)
+        cv2.line(img_disp, vu0, vu1, color=color, thickness=1)
 
 
 ''' ------------------------------ Main ------------------------------------ '''
@@ -281,6 +312,9 @@ def main(args):
         data_reader = DataReader_ROS(args)
     ith_image = 0
     total_images = data_reader.total_images()
+
+    # -- Result publisher.
+    pub_res_img = ColorImagePublisher(TOPIC_RES_IMAGE)
 
     # -- Detector.
     detector = OpenposeDetector(
@@ -303,9 +337,14 @@ def main(args):
         rospy.loginfo("Reading {}/{}th color/depth images...".format(
             ith_image+1, total_images))
         rgbd = data_reader.read_next_data()
-        pcl_xyz = rgbd.create_point_cloud(depth_max=4.0)
 
-        rgbd.set_camera_pose(cam_pose)  # This is only for visualize 3d joints.
+        pcl_xyz = rgbd.create_point_cloud(depth_max=4.0)
+        intrin_mat = rgbd.intrinsic_matrix()
+        color = rgbd.get_color_image()
+        img_disp = color.copy()
+
+        # Set this only for visualize 3d joints.
+        rgbd.set_camera_pose(cam_pose)
         ith_image += 1
 
         # -- Detect joints.
@@ -327,6 +366,8 @@ def main(args):
             human = Human(rgbd, body_joints[i], hand_joints[i])
 
             human.draw_rviz()
+
+            # -- 3D pointing detection.
             is_arm_exist, arm_3_joints_xyz = human.get_right_arm()
             if is_arm_exist:
                 is_pointing = is_arm_stretched(  # Stretched means pointings.
@@ -336,7 +377,9 @@ def main(args):
                     is_hit, xyz_hit = get_3d_ray_hit_point(
                         arm_3_joints_xyz, pcl_xyz)
                     if is_hit:
-                        draw_hit_point(xyz_hit, cam_pose)
+                        draw_3d_hit_point(xyz_hit, cam_pose)
+                        draw_2d_hit_point(xyz_hit, intrin_mat, img_disp,
+                                          xyz_hand=arm_3_joints_xyz[2])
 
             # Print info.
             rospy.loginfo("  Drawing {}/{}th person with id={} on rviz.".format(
@@ -354,6 +397,7 @@ def main(args):
 
         # -- Print results.
         print("Total time = {} seconds.".format(time.time()-t0))
+        pub_res_img.publish(img_disp)
 
         # -- Keep update camera pose for rviz visualization.
         cam_pose_pub.publish()
