@@ -24,9 +24,9 @@ if True:  # Import scripts from another ROS repo.
     from utils.lib_rviz_marker import RvizMarker
 
 ''' ------------------------------ Settings ------------------------------------ '''
-ARM_STRETCH_ANGLE_THRESH = 30.0  # Degrees
-
-
+ARM_STRETCH_ANGLE_THRESH = 45.0  # Degrees
+VIZ_ID0 = 10000000
+VIZ_ID_RAY = 10000001
 ''' ------------------------------ Command line inputs ------------------------------------ '''
 
 
@@ -177,6 +177,14 @@ class DataReader_ROS(object):
         return rgbd
 
 
+''' ------------------------------ Math ------------------------------------ '''
+
+
+def cam_to_world(xyz_in_camera, camera_pose):
+    xyz_in_world = camera_pose.dot(np.append(xyz_in_camera, [1.0]))[0:3]
+    return xyz_in_world
+
+
 ''' ------------------------------ 3D pointing detection ------------------------------------ '''
 
 
@@ -187,10 +195,25 @@ def is_arm_stretched(
     p0, p1, p2 = arm_3_joints_xyz[0], arm_3_joints_xyz[1], arm_3_joints_xyz[2]
     vec1 = np.array(p1 - p0)
     vec2 = np.array(p2 - p1)
-    angle = vec1.dot(vec2)/(np.linalg.norm(vec1) * np.linalg.norm(vec2))
+    angle = np.arccos(vec1.dot(vec2)/(np.linalg.norm(vec1) * np.linalg.norm(vec2)))
     angle = angle / math.pi * 180.0
     is_stretched = np.abs(angle) <= angle_thresh
     return is_stretched
+
+
+def draw_pointing_ray(arm_3_joints_xyz, cam_pose,
+                      extend_meters=3.0):
+    p0, p1 = arm_3_joints_xyz[1], arm_3_joints_xyz[2]
+    p2 = p0 + extend_meters * (p1 - p0) / np.linalg.norm(p1 - p0)
+    p1_w = cam_to_world(p1, cam_pose)
+    p2_w = cam_to_world(p2, cam_pose)
+    RvizMarker.draw_link(
+        VIZ_ID_RAY, p1_w, p2_w, _color='y')
+
+
+def delete_pointing_ray():
+   RvizMarker.delete_marker(VIZ_ID_RAY)
+
 
 def which_pixel_is_pointed(arm_3_joints_xyz, pcl_xyz):
     pass
@@ -249,6 +272,7 @@ def main(args):
 
         # -- Draw humans in rviz.
         humans = []
+        is_pointing = False
         for i in range(N_people):
             human = Human(rgbd, body_joints[i], hand_joints[i])
 
@@ -258,6 +282,7 @@ def main(args):
                 is_pointing = is_arm_stretched(  # Stretched means pointings.
                     arm_3_joints_xyz, angle_thresh=ARM_STRETCH_ANGLE_THRESH)
                 if is_pointing:
+                    draw_pointing_ray(arm_3_joints_xyz, cam_pose)
                     which_pixel_is_pointed(arm_3_joints_xyz, pcl_xyz)
 
             # Print info.
@@ -267,7 +292,9 @@ def main(args):
             humans.append(human)
 
             break  # Only process one human!!! (TODO: Remove this.)
-
+        if not is_pointing:
+            delete_pointing_ray()
+            
         prev_humans = humans
         print("Total time = {} seconds.".format(time.time()-t0))
 
