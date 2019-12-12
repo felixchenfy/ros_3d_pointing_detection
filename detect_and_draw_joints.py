@@ -14,13 +14,20 @@ if True:  # Add project root
     import os
     ROOT = os.path.dirname(os.path.abspath(__file__))+'/'
 
-if True: # Import scripts from another ROS repo.
+if True:  # Import scripts from another ROS repo.
     sys.path.append("/home/feiyu/catkin_ws/src/ros_openpose_rgbd")
     from lib_draw_3d_joints import Human, set_default_params
     from lib_openpose_detector import OpenposeDetector
     from utils.lib_rgbd import RgbdImage, MyCameraInfo
     from utils.lib_ros_rgbd_pub_and_sub import ColorImageSubscriber, DepthImageSubscriber, CameraInfoSubscriber
     from utils.lib_geo_trans import rotx, roty, rotz, get_Rp_from_T, form_T
+    from utils.lib_rviz_marker import RvizMarker
+
+''' ------------------------------ Settings ------------------------------------ '''
+ARM_STRETCH_ANGLE_THRESH = 30.0  # Degrees
+
+
+''' ------------------------------ Command line inputs ------------------------------------ '''
 
 
 def parse_command_line_arguments():
@@ -90,6 +97,9 @@ def Bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+''' ------------------------------ Data loader ------------------------------------ '''
 
 
 class DataReader_DISK(object):
@@ -167,6 +177,28 @@ class DataReader_ROS(object):
         return rgbd
 
 
+''' ------------------------------ 3D pointing detection ------------------------------------ '''
+
+
+def is_arm_stretched(
+    arm_3_joints_xyz,
+    angle_thresh,  # degrees
+):
+    p0, p1, p2 = arm_3_joints_xyz[0], arm_3_joints_xyz[1], arm_3_joints_xyz[2]
+    vec1 = np.array(p1 - p0)
+    vec2 = np.array(p2 - p1)
+    angle = vec1.dot(vec2)/(np.linalg.norm(vec1) * np.linalg.norm(vec2))
+    angle = angle / math.pi * 180.0
+    is_stretched = np.abs(angle) <= angle_thresh
+    return is_stretched
+
+def which_pixel_is_pointed(arm_3_joints_xyz, pcl_xyz):
+    pass
+
+
+''' ------------------------------ Main ------------------------------------ '''
+
+
 def main(args):
 
     # -- Data reader.
@@ -198,7 +230,9 @@ def main(args):
         rospy.loginfo("Reading {}/{}th color/depth images...".format(
             ith_image+1, total_images))
         rgbd = data_reader.read_next_data()
-        rgbd.set_camera_pose(cam_pose)
+        pcl_xyz = rgbd.create_point_cloud(depth_max=4.0)
+
+        rgbd.set_camera_pose(cam_pose)  # This is only for visualize 3d joints.
         ith_image += 1
 
         # -- Detect joints.
@@ -217,11 +251,23 @@ def main(args):
         humans = []
         for i in range(N_people):
             human = Human(rgbd, body_joints[i], hand_joints[i])
+
             human.draw_rviz()
+            is_arm_exist, arm_3_joints_xyz = human.get_right_arm()
+            if is_arm_exist:
+                is_pointing = is_arm_stretched(  # Stretched means pointings.
+                    arm_3_joints_xyz, angle_thresh=ARM_STRETCH_ANGLE_THRESH)
+                if is_pointing:
+                    which_pixel_is_pointed(arm_3_joints_xyz, pcl_xyz)
+
+            # Print info.
             rospy.loginfo("  Drawing {}/{}th person with id={} on rviz.".format(
                 i+1, N_people, human._id))
             rospy.loginfo("    " + human.get_hands_str())
             humans.append(human)
+
+            break  # Only process one human!!! (TODO: Remove this.)
+
         prev_humans = humans
         print("Total time = {} seconds.".format(time.time()-t0))
 
