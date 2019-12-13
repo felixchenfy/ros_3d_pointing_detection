@@ -3,3 +3,7 @@ build/
 .vscode/
 output
 data
+
+tmp*
+backup
+trash
