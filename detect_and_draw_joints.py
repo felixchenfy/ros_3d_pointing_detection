@@ -27,11 +27,11 @@ if True:  # Import scripts from another ROS repo.
     from utils.lib_rviz_marker import RvizMarker
 
 ''' ------------------------------ Settings ------------------------------------ '''
-ARM_STRETCH_ANGLE_THRESH = 45.0  # Degrees
 VIZ_ID0 = 10000000
 VIZ_ID_RAY = 10000001
 VIZ_ID_HIT_POINT = 10000002
 TOPIC_RES_IMAGE = "3d_pointing/res_image"
+DST_RES_IMAGE_VIZ = "output/res_img/"
 
 ''' ------------------------------ Command line inputs ------------------------------------ '''
 
@@ -97,7 +97,7 @@ def parse_command_line_arguments():
 def Bool(v):
     ''' A bool class for argparser '''
     # TODO: Add a reference
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+    if v.lower() in ('yes', 'true', 't', 'r', '1'):
         return True
     elif v.lower() in ('no', 'false', 'f', 'n', '0'):
         return False
@@ -200,16 +200,22 @@ def cam2pixel(xyz_in_camera, camera_intrinsics):
         image_points_xy {np.ndarray, np.float32}: (2, )
     '''
     pt_3d_on_cam_plane = xyz_in_camera/xyz_in_camera[2]  # z=1
-    image_points_xy = camera_intrinsics.dot(pt_3d_on_cam_plane)[0:2]
-    return image_points_xy
+    xy = camera_intrinsics.dot(pt_3d_on_cam_plane)[0:2]
+    xy = tuple(int(v) for v in xy)
+    return xy
 
 
 ''' ------------------------------ 3D pointing detection ------------------------------------ '''
 
 
+def get_joints_for_pointing(arm_3_joints_xyz):
+    p1, p2 = arm_3_joints_xyz[0].copy(), arm_3_joints_xyz[2].copy()
+    return p1, p2
+
+
 def is_arm_stretched(
     arm_3_joints_xyz,
-    angle_thresh,  # degrees
+    angle_thresh=30.0,  # degrees
 ):
     p0, p1, p2 = arm_3_joints_xyz[0], arm_3_joints_xyz[1], arm_3_joints_xyz[2]
     vec1 = np.array(p1 - p0)
@@ -236,36 +242,46 @@ def get_3d_ray_hit_point(
         ret {bool}
         xyz {3d point}
     '''
-    p0, p1, p2 = arm_3_joints_xyz[0], arm_3_joints_xyz[1], arm_3_joints_xyz[2]
-
-    # Select points that are close to the pointing direction.
-    dists_3d_line = point_3d_line_distance(pcl_xyz, p1, p2)
-    valid_pts = pcl_xyz[dists_3d_line <= thresh_close_to_line]
-    if valid_pts.size == 0:
-        return False, None
+    p1, p2 = get_joints_for_pointing(arm_3_joints_xyz)
+    valid_pts = pcl_xyz
 
     # Select points that are in the front of the hand.
     dists_plane = point_plane_distance(valid_pts, p1, p2-p1)
-    valid_pts = valid_pts[dists_plane >= thresh_in_front_of_hand]
+    thresh = thresh_in_front_of_hand + np.linalg.norm(p2-p1)
+    valid_idx = dists_plane >= thresh
+    valid_pts = valid_pts[valid_idx]
+    dists_plane = dists_plane[valid_idx]
     if valid_pts.size == 0:
         return False, None
 
-    # Get center.
-    center = np.mean(valid_pts, axis=0)  # (3, )
-    return True, center
+    # Select points that are close to the pointing direction.
+    dists_3d_line = point_3d_line_distance(valid_pts, p1, p2)
+    valid_idx = dists_3d_line <= thresh_close_to_line
+    valid_pts = valid_pts[valid_idx]
+    if valid_pts.size == 0:
+        return False, None
+    dists_plane = dists_plane[valid_idx]
+    closest_point_idx = np.argmin(dists_plane)
+
+    # Get hit point.
+    hit_point = valid_pts[closest_point_idx]
+    return True, hit_point
 
 
 ''' ------------------------------ Rviz visualization ------------------------------------ '''
 
 
-def draw_pointing_ray(arm_3_joints_xyz, cam_pose,
-                      extend_meters=3.0):
-    p0, p1 = arm_3_joints_xyz[1], arm_3_joints_xyz[2]
-    p2 = p0 + extend_meters * (p1 - p0) / np.linalg.norm(p1 - p0)
+def draw_3d_pointing_ray(arm_3_joints_xyz, cam_pose,
+                         extend_meters_3d=3.0,
+                         ):
+    # Draw 3d.
+    p1, p2 = get_joints_for_pointing(arm_3_joints_xyz)
+    p3 = p1 + extend_meters_3d * (p2 - p1) / np.linalg.norm(p2 - p1)
     p1_w = cam_to_world(p1, cam_pose)
     p2_w = cam_to_world(p2, cam_pose)
+    p3_w = cam_to_world(p3, cam_pose)
     RvizMarker.draw_link(
-        VIZ_ID_RAY, p1_w, p2_w, _color='y')
+        VIZ_ID_RAY, p1_w, p3_w, _color='r')
 
 
 def delete_pointing_ray():
@@ -276,7 +292,7 @@ def draw_3d_hit_point(xyz, cam_pose):
     RvizMarker.draw_dot(
         VIZ_ID_HIT_POINT,
         cam_to_world(xyz, cam_pose),
-        _color='y',
+        _color='r',
         _size=0.3)
 
 
@@ -291,13 +307,26 @@ def draw_2d_hit_point(xyz_hit, intrin_mat, img_disp,
                       xyz_hand=None,
                       dot_radius=5, color=[0, 0, 255]):
     xy1 = cam2pixel(xyz_hit, intrin_mat)
-    vu1 = tuple(int(v) for v in xy1)
-    cv2.circle(img_disp, vu1,
+    cv2.circle(img_disp, xy1,
                radius=dot_radius, color=color, thickness=-1)
     if xyz_hand is not None:
         xy0 = cam2pixel(xyz_hand, intrin_mat)
-        vu0 = tuple(int(v) for v in xy0)
-        cv2.line(img_disp, vu0, vu1, color=color, thickness=1)
+        cv2.line(img_disp, xy0, xy1, color=color, thickness=1)
+
+
+def draw_2d_pointing_ray(arm_3_joints_xyz, cam_pose,
+                         intrin_mat, img_disp,
+                         extend_meters_2d=0.5,
+                         ):
+    # Draw 2d.
+    p1, p2 = get_joints_for_pointing(arm_3_joints_xyz)
+    color = [0, 0, 255]  # red
+    p3 = p2 + extend_meters_2d * (p2 - p1) / np.linalg.norm(p2 - p1)
+    cv2.line(img_disp,
+             cam2pixel(p1, intrin_mat),
+             cam2pixel(p3, intrin_mat),
+             color=color,
+             thickness=1)
 
 
 ''' ------------------------------ Main ------------------------------------ '''
@@ -315,6 +344,8 @@ def main(args):
 
     # -- Result publisher.
     pub_res_img = ColorImagePublisher(TOPIC_RES_IMAGE)
+    if not os.path.exists(DST_RES_IMAGE_VIZ):
+        os.makedirs(DST_RES_IMAGE_VIZ)
 
     # -- Detector.
     detector = OpenposeDetector(
@@ -341,7 +372,6 @@ def main(args):
         pcl_xyz = rgbd.create_point_cloud(depth_max=4.0)
         intrin_mat = rgbd.intrinsic_matrix()
         color = rgbd.get_color_image()
-        img_disp = color.copy()
 
         # Set this only for visualize 3d joints.
         rgbd.set_camera_pose(cam_pose)
@@ -351,6 +381,7 @@ def main(args):
         print("  Detecting joints...")
         body_joints, hand_joints = detector.detect(
             rgbd.color_image(), is_return_joints=True)
+        img_disp = detector.get_img_viz()
         N_people = len(body_joints)
 
         # -- Delete previous joints.
@@ -371,15 +402,20 @@ def main(args):
             is_arm_exist, arm_3_joints_xyz = human.get_right_arm()
             if is_arm_exist:
                 is_pointing = is_arm_stretched(  # Stretched means pointings.
-                    arm_3_joints_xyz, angle_thresh=ARM_STRETCH_ANGLE_THRESH)
+                    arm_3_joints_xyz)
                 if is_pointing:
-                    draw_pointing_ray(arm_3_joints_xyz, cam_pose)
+                    draw_3d_pointing_ray(
+                        arm_3_joints_xyz, cam_pose)
                     is_hit, xyz_hit = get_3d_ray_hit_point(
                         arm_3_joints_xyz, pcl_xyz)
                     if is_hit:
-                        draw_3d_hit_point(xyz_hit, cam_pose)
                         draw_2d_hit_point(xyz_hit, intrin_mat, img_disp,
                                           xyz_hand=arm_3_joints_xyz[2])
+                        draw_3d_hit_point(xyz_hit, cam_pose)
+                    else:
+                        draw_2d_pointing_ray(arm_3_joints_xyz, cam_pose,
+                                             intrin_mat, img_disp,
+                                             extend_meters_2d=1.0)
 
             # Print info.
             rospy.loginfo("  Drawing {}/{}th person with id={} on rviz.".format(
@@ -398,6 +434,8 @@ def main(args):
         # -- Print results.
         print("Total time = {} seconds.".format(time.time()-t0))
         pub_res_img.publish(img_disp)
+        cv2.imwrite(DST_RES_IMAGE_VIZ +
+                    "/{:05d}.png".format(ith_image), img_disp)
 
         # -- Keep update camera pose for rviz visualization.
         cam_pose_pub.publish()
