@@ -1,0 +1,155 @@
+<launch>
+    <!-- This script is for launching Realsense camera.
+        Many notes about Realsense are also kept here.
+    -->
+
+
+    <!-- Realsense installation tutorial:
+
+    * ROS wiki::  
+    http://wiki.ros.org/realsense2_camera       
+
+    * Install Realsense libraries and run with its own IDE:   
+    https://github.com/IntelRealSense/librealsense/blob/master/doc/distribution_linux.md#installing-the-packages
+    $ realsense-viewer
+
+    * Install its ROS package and use `roslaunch`:
+    https://github.com/intel-ros/realsense/#installation-instructions
+
+    -->
+
+    <!-- Command to start realsense.
+        $ roslaunch realsense2_camera rs_camera.launch filters:=pointcloud align_depth:=true 
+    -->
+
+    <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+        <arg name="filters" default="pointcloud" />
+        <arg name="align_depth" default="true" />
+        <!-- <arg name="json_file_path" default="$(find ros_3d_pointing_detection)/config/high_acc_disparity12.json"/> -->
+        <!-- <arg name="color_width" default="640" />
+        <arg name="color_height" default="480" />
+        <arg name="color_fps" default="15" />
+        <arg name="depth_width" default="640" />
+        <arg name="depth_height" default="480" />
+        <arg name="depth_fps" default="15" />
+        <arg name="enable_infra1" default="true" />
+        <arg name="enable_infra2" default="true" /> -->
+    </include>
+
+
+    <!--    Display Realsense's data by rviz, 
+            including: color/depth/allgiend_depth/point_cloud.
+    Command:
+        $ rosrun rviz rviz $(find ros_3d_pointing_detection)/config/rviz_color_depth_pcl.rviz
+    -->
+    <include file="$(find ros_3d_pointing_detection)/launch/run_rviz.launch">
+    </include>
+
+    <!-- 
+    If you publish the tf here,
+    please make sure this is the same as the
+    `cam_pose` in this sentence:
+        `cam_pose, cam_pose_pub = set_default_params()`
+    which is in this file:
+        detect_and_draw_joints.py
+    You may use this online calculator: https://www.andre-gaschler.com/rotationconverter/
+    to calculate the quarternion from rotation matrix.
+    -->
+    <!-- <node pkg="tf" type="static_transform_publisher"
+        name="set_camera_pose"
+        args="0 0 1 0.5 -0.5 0.5 -0.5 base camera_link 5"
+    /> -->
+
+    <!-- Main topics:
+            color image:        /camera/color/image_raw
+            depth image:        /camera/depth/image_rect_raw
+            depth image (alligned with color image): 
+                                /camera/aligned_depth_to_color/image_raw
+            point cloud topic:  /camera/depth/color/points
+
+        Fixed frame: camera_link
+    -->
+
+    <!-- Camera info: $ rostopic echo /camera/color/cama_info
+            header: 
+            seq: 7294
+            stamp: 
+                secs: 1575860837
+                nsecs: 935319465
+            frame_id: "camera_color_optical_frame"
+            height: 480
+            width: 640
+            distortion_model: "plumb_bob"
+            D: [0.0, 0.0, 0.0, 0.0, 0.0]
+            K: [617.25, 0.0, 317.3921203613281, 0.0, 617.5486450195312, 245.98019409179688, 0.0, 0.0, 1.0]
+            R: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+            P: [617.25, 0.0, 317.3921203613281, 0.0, 0.0, 617.5486450195312, 245.98019409179688, 0.0, 0.0, 0.0, 1.0, 0.0]
+            binning_x: 0
+            binning_y: 0
+            roi: 
+            x_offset: 0
+            y_offset: 0
+            height: 0
+            width: 0
+            do_rectify: False
+    -->
+
+    <!-- tf frames: $ rosrun tf view_frames
+            See: config/realsense_tf_frames.pdf
+    -->
+
+    <!-- All ROS topics published by Realsense: 
+            /camera/aligned_depth_to_color/camera_info
+            /camera/aligned_depth_to_color/image_raw
+            /camera/aligned_depth_to_color/image_raw/compressed
+            /camera/aligned_depth_to_color/image_raw/compressed/parameter_descriptions
+            /camera/aligned_depth_to_color/image_raw/compressed/parameter_updates
+            /camera/aligned_depth_to_infra1/camera_info
+            /camera/aligned_depth_to_infra1/image_raw
+            /camera/aligned_depth_to_infra1/image_raw/compressed
+            /camera/aligned_depth_to_infra1/image_raw/compressed/parameter_descriptions
+            /camera/aligned_depth_to_infra1/image_raw/compressed/parameter_updates
+            /camera/color/camera_info
+            /camera/color/image_raw
+            /camera/color/image_raw/compressed
+            /camera/color/image_raw/compressed/parameter_descriptions
+            /camera/color/image_raw/compressed/parameter_updates
+            /camera/depth/camera_info
+            /camera/depth/color/points
+            /camera/depth/image_rect_raw
+            /camera/depth/image_rect_raw/compressed
+            /camera/depth/image_rect_raw/compressed/parameter_descriptions
+            /camera/depth/image_rect_raw/compressed/parameter_updates
+            /camera/extrinsics/depth_to_color
+            /camera/extrinsics/depth_to_infra1
+            /camera/extrinsics/depth_to_infra2
+            /camera/infra1/camera_info
+            /camera/infra1/image_rect_raw
+            /camera/infra1/image_rect_raw/compressed
+            /camera/infra1/image_rect_raw/compressed/parameter_descriptions
+            /camera/infra1/image_rect_raw/compressed/parameter_updates
+            /camera/infra2/camera_info
+            /camera/infra2/image_rect_raw
+            /camera/infra2/image_rect_raw/compressed
+            /camera/infra2/image_rect_raw/compressed/parameter_descriptions
+            /camera/infra2/image_rect_raw/compressed/parameter_updates
+            /camera/pointcloud/parameter_descriptions
+            /camera/pointcloud/parameter_updates
+            /camera/realsense2_camera_manager/bond
+            /camera/rgb_camera/auto_exposure_roi/parameter_descriptions
+            /camera/rgb_camera/auto_exposure_roi/parameter_updates
+            /camera/rgb_camera/parameter_descriptions
+            /camera/rgb_camera/parameter_updates
+            /camera/stereo_module/auto_exposure_roi/parameter_descriptions
+            /camera/stereo_module/auto_exposure_roi/parameter_updates
+            /camera/stereo_module/parameter_descriptions
+            /camera/stereo_module/parameter_updates
+            /clicked_point
+            /diagnostics
+            /initialpose
+            /move_base_simple/goal
+            /tf
+            /tf_static
+    -->
+
+</launch>

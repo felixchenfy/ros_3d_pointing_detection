@@ -1,0 +1,30 @@
+<launch>
+
+    <arg name="base_dir" default="$(find ros_3d_pointing_detection)" />
+    <arg name="config_file" default="config/publish_test_rgbd_data_config.yaml" />
+
+    <node pkg="tf" type="static_transform_publisher"
+        name="set_camera_pose"
+        args="0 0 1 0.5 -0.5 0.5 -0.5 base camera_link 5"
+    />
+
+    <!-- 
+    The above quaternion is the same as:
+    cam_pose = np.array([  # let camera faces +x direction.
+        [0.,  0.,  1., 0.],
+        [-1., 0.,  0., 0.],
+        [0.,  -1., 0., 1.],
+        [0.,  0., 0., 1.],
+    ]) -->
+
+    <node pkg="ros_pub_and_sub_rgbd_and_cloud"
+        type="pub_rgbd_and_cloud.py"
+        name="pub_rgbd_and_cloud"
+        args="--base_dir $(arg base_dir) --config_file $(arg config_file)"
+        output = "screen"
+    />
+    
+    <node type="rviz" name="rviz" pkg="rviz" 
+        args="-d $(find ros_3d_pointing_detection)/config/rviz_color_depth_pcl.rviz" />
+
+</launch>

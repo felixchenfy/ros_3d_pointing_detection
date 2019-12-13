@@ -1,0 +1,6 @@
+<launch>
+   
+    <node type="rviz" name="rviz" pkg="rviz" 
+        args="-d $(find ros_3d_pointing_detection)/config/rviz_color_depth_pcl.rviz" />
+
+</launch>
