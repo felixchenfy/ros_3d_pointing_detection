@@ -1,0 +1,29 @@
+# Configuration for `pub_rgbd_and_cloud.py`.
+
+ros_topic_namespace: ""
+publish_rate: 1.0 # How many data to publish per second.
+is_loop_forever: True # After publishing all images, loop back to the 1st one.
+frame_id: "camera_link" # Name of the camera frame.
+
+color:
+  is_publish: True
+  # folder: "data/image_i1/color"
+  folder: "data/images_n76/color"
+  ros_topic: "camera/color/image_raw"
+
+depth:
+  is_publish: True
+  # folder: "data/image_i1/depth"
+  folder: "data/images_n76/depth"
+  depth_unit: 0.001 # If depth[i,j]=D, then this pixel's depth is (depth_unit*D) meters.
+  depth_trunc: 5.0 # Depth value larger than ${depth_trunc} meters gets truncated to zero.
+  ros_topic: "camera/aligned_depth_to_color/image_raw"
+
+camera_info:
+  is_publish: True
+  file: "data/images_n76/cam_params_realsense.json"
+  ros_topic: "camera/color/camera_info"
+
+point_cloud:
+  is_publish: True
+  ros_topic: "camera/depth/color/points"
