@@ -28,7 +28,7 @@ if True:  # Import scripts from another ROS repo.
     from utils.lib_rviz_marker import RvizMarker
 
 ''' ------------------------------ Settings ------------------------------------ '''
-VIZ_ID0 = 10000000
+VIZ_HUMAN_ID = 100
 VIZ_ID_RAY = 10000001
 VIZ_ID_HIT_POINT = 10000002
 TOPIC_RES_IMAGE = "3d_pointing/res_image"
@@ -48,7 +48,10 @@ def parse_command_line_arguments():
     # -- Select data source.
     parser.add_argument("-s", "--data_source",
                         default="disk",
-                        choices=["rostopic", "disk"])
+                        choices=["rostopic", "disk"],
+                        help="`disk` option is only for debug. "
+                        "Since darknet_ros(YOLO) package reads from rostopic, "
+                        "we need to set this as `rostopic` when not debugging.")
     parser.add_argument("-y", "--detect_object", type=Bool,
                         default=False)
     parser.add_argument("-z", "--detect_hand", type=Bool,
@@ -393,6 +396,9 @@ def main(args):
         img_disp = skeleton_detector.get_img_viz()
         N_people = len(body_joints)
 
+        # Only process one human!!! (TODO: Remove this.)
+        N_people = 1 if N_people > 1 else 0
+
         # -- Delete previous joints.
         for human in prev_humans:
             # If I put delete after drawing new markders,
@@ -403,7 +409,11 @@ def main(args):
         humans = []
         is_pointing, is_hit = False, False
         for i in range(N_people):
-            human = Human(rgbd, body_joints[i], hand_joints[i])
+            human = Human(rgbd, body_joints[i], hand_joints[i],
+                        #   id=VIZ_HUMAN_ID,  # set id as a fixed value
+                        #   # because we assume there is at most one person.
+                        #   # TODO: Remove this constraint.
+                          )
 
             human.draw_rviz()
 
@@ -421,6 +431,7 @@ def main(args):
                         hit_point_2d = draw_2d_hit_point(xyz_hit, intrin_mat, img_disp,
                                                          xyz_hand=arm_3_joints_xyz[2])
                         draw_3d_hit_point(xyz_hit, cam_pose)
+
                         # Draw yolo result
                         if args.detect_object:
                             bboxes = yolo_sub.get_bboxes()
@@ -437,8 +448,6 @@ def main(args):
                 i+1, N_people, human._id))
             rospy.loginfo("    " + human.get_hands_str())
             humans.append(human)
-
-            break  # Only process one human!!! (TODO: Remove this.)
 
         # -- Delete markers.
         if not is_pointing:
