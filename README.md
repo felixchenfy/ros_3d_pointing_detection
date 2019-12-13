@@ -1,6 +1,7 @@
 ros_3d_pointing_detection
 ==================================
-Detect which object the person's right arm is pointing to.  
+Detect which object a person's right arm is pointing at.
+  
 ![](doc/video_demo/demo.gif)
 
 **Contents:**
