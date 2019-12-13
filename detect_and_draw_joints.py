@@ -18,7 +18,7 @@ if True:  # Add project root
 
 
 if True:  # Import scripts from another ROS repo.
-    sys.path.append("/home/feiyu/catkin_ws/src/ros_openpose_rgbd")
+    sys.path.append(ROOT + "../ros_openpose_rgbd")
     from lib_draw_3d_joints import Human, set_default_params
     from lib_openpose_detector import OpenposeDetector
     from utils.lib_rgbd import RgbdImage, MyCameraInfo
@@ -28,7 +28,7 @@ if True:  # Import scripts from another ROS repo.
     from utils.lib_rviz_marker import RvizMarker
 
 ''' ------------------------------ Settings ------------------------------------ '''
-VIZ_HUMAN_ID = 100
+VIZ_HUMAN_ID = 1
 VIZ_ID_RAY = 10000001
 VIZ_ID_HIT_POINT = 10000002
 TOPIC_RES_IMAGE = "3d_pointing/res_image"
@@ -105,7 +105,7 @@ def parse_command_line_arguments():
 def Bool(v):
     ''' A bool class for argparser '''
     # TODO: Add a reference
-    if v.lower() in ('yes', 'true', 't', 'r', '1'):
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
     elif v.lower() in ('no', 'false', 'f', 'n', '0'):
         return False
@@ -397,7 +397,7 @@ def main(args):
         N_people = len(body_joints)
 
         # Only process one human!!! (TODO: Remove this.)
-        N_people = 1 if N_people > 1 else 0
+        N_people = 1 if N_people >= 1 else 0
 
         # -- Delete previous joints.
         for human in prev_humans:
@@ -410,9 +410,9 @@ def main(args):
         is_pointing, is_hit = False, False
         for i in range(N_people):
             human = Human(rgbd, body_joints[i], hand_joints[i],
-                        #   id=VIZ_HUMAN_ID,  # set id as a fixed value
-                        #   # because we assume there is at most one person.
-                        #   # TODO: Remove this constraint.
+                          id=VIZ_HUMAN_ID,  # set id as a fixed value
+                          # because we assume there is at most one person.
+                          # TODO: Remove this constraint.
                           )
 
             human.draw_rviz()
@@ -437,7 +437,8 @@ def main(args):
                             bboxes = yolo_sub.get_bboxes()
                             box_id = in_which_box(hit_point_2d, bboxes)
                             if box_id >= 0:
-                                draw_box(img_disp, bboxes[box_id])
+                                draw_box(img_disp, bboxes[box_id],
+                                         color=[0, 0, 255], thickness=4)
                     else:
                         draw_2d_pointing_ray(arm_3_joints_xyz, cam_pose,
                                              intrin_mat, img_disp,
