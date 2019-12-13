@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from calc_3d_dist import point_3d_line_distance, point_plane_distance
+from yolo_subscriber import YoloSubscriber, in_which_box, draw_box
 import numpy as np
 import cv2
 import rospy
@@ -32,6 +33,8 @@ VIZ_ID_RAY = 10000001
 VIZ_ID_HIT_POINT = 10000002
 TOPIC_RES_IMAGE = "3d_pointing/res_image"
 DST_RES_IMAGE_VIZ = "output/res_img/"
+YOLO_TOPIC_NAME = "darknet_ros/bounding_boxes"
+OBJECT_CLASSES = ["cup", "bowl", "banana", "laptop"]
 
 ''' ------------------------------ Command line inputs ------------------------------------ '''
 
@@ -46,6 +49,8 @@ def parse_command_line_arguments():
     parser.add_argument("-s", "--data_source",
                         default="disk",
                         choices=["rostopic", "disk"])
+    parser.add_argument("-y", "--detect_object", type=Bool,
+                        default=False)
     parser.add_argument("-z", "--detect_hand", type=Bool,
                         default=False)
     parser.add_argument("-u", "--depth_unit", type=float,
@@ -312,6 +317,8 @@ def draw_2d_hit_point(xyz_hit, intrin_mat, img_disp,
     if xyz_hand is not None:
         xy0 = cam2pixel(xyz_hand, intrin_mat)
         cv2.line(img_disp, xy0, xy1, color=color, thickness=1)
+    hit_point_2d = xy1
+    return hit_point_2d
 
 
 def draw_2d_pointing_ray(arm_3_joints_xyz, cam_pose,
@@ -348,8 +355,10 @@ def main(args):
         os.makedirs(DST_RES_IMAGE_VIZ)
 
     # -- Detector.
-    detector = OpenposeDetector(
+    skeleton_detector = OpenposeDetector(
         {"hand": args.detect_hand})
+    if args.detect_object:
+        yolo_sub = YoloSubscriber(YOLO_TOPIC_NAME, OBJECT_CLASSES)
 
     # -- Settings.
     cam_pose, cam_pose_pub = set_default_params()
@@ -379,9 +388,9 @@ def main(args):
 
         # -- Detect joints.
         print("  Detecting joints...")
-        body_joints, hand_joints = detector.detect(
+        body_joints, hand_joints = skeleton_detector.detect(
             rgbd.color_image(), is_return_joints=True)
-        img_disp = detector.get_img_viz()
+        img_disp = skeleton_detector.get_img_viz()
         N_people = len(body_joints)
 
         # -- Delete previous joints.
@@ -409,9 +418,15 @@ def main(args):
                     is_hit, xyz_hit = get_3d_ray_hit_point(
                         arm_3_joints_xyz, pcl_xyz)
                     if is_hit:
-                        draw_2d_hit_point(xyz_hit, intrin_mat, img_disp,
-                                          xyz_hand=arm_3_joints_xyz[2])
+                        hit_point_2d = draw_2d_hit_point(xyz_hit, intrin_mat, img_disp,
+                                                         xyz_hand=arm_3_joints_xyz[2])
                         draw_3d_hit_point(xyz_hit, cam_pose)
+                        # Draw yolo result
+                        if args.detect_object:
+                            bboxes = yolo_sub.get_bboxes()
+                            box_id = in_which_box(hit_point_2d, bboxes)
+                            if box_id >= 0:
+                                draw_box(img_disp, bboxes[box_id])
                     else:
                         draw_2d_pointing_ray(arm_3_joints_xyz, cam_pose,
                                              intrin_mat, img_disp,

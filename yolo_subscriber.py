@@ -3,6 +3,8 @@
 
 from darknet_ros_msgs.msg import BoundingBoxes, BoundingBox
 import rospy
+import cv2
+import numpy as np
 
 ''' BoundingBoxes:
 Header header
@@ -23,11 +25,22 @@ string Class
 
 def in_which_box(xy, bboxes):
     x, y = xy[0], xy[1]
-    for i, box in enumerate(bboxes):
-        xmin, ymin, xmax, ymax = box
+    for i, bbox in enumerate(bboxes):
+        xmin, ymin, xmax, ymax = bbox
         if x >= xmin and x <= xmax and y >= ymin and y <= ymax:
             return i
     return -1
+
+
+def draw_box(img_disp, bbox, color=[255, 0, 0], thickness=2):
+    xmin, ymin, xmax, ymax = bbox
+    xmin, ymin, width, height = map(
+        int, [xmin, ymin, xmax-xmin, ymax-ymin])  # to int
+    bbox = (xmin, ymin, width, height)
+    img_disp = cv2.rectangle(
+        img_disp, rec=bbox, color=color, thickness=thickness)
+    return img_disp
+
 
 class YoloSubscriber(object):
     def __init__(
@@ -62,7 +75,7 @@ class YoloSubscriber(object):
         self._detect_results = _detect_results
 
 
-def main():
+def test_subscribe_and_draw_bbox():
     sub = YoloSubscriber(
         topic_name="darknet_ros/bounding_boxes",
         target_classes=["cup", "bowl", "banana", "laptop"])
@@ -74,19 +87,28 @@ def main():
         [380, 400],
         [450, 400],
     ]
+    img_disp0 = 255 + np.zeros((480, 640, 3), np.uint8)
+
     while not rospy.is_shutdown():
         bboxes = sub.get_bboxes()
         print(bboxes)
+        ith_box = -1
         for xy in list_xy:
             ret = in_which_box(xy, bboxes)
             if ret >= 0:
-                print("In {}th box".format(ret))
+                ith_box = ret
+                print("In {}th bbox".format(ith_box))
                 break
         print("Complete an image.")
+        img_disp = img_disp0.copy()
+        img_disp = draw_box(img_disp, bboxes[ith_box])
+        cv2.imshow("bbox", img_disp)
+        cv2.waitKey(10)
+
 
 if __name__ == '__main__':
     node_name = "yolo_subscriber"
     rospy.init_node(node_name)
     rospy.sleep(0.1)
-    main()
+    test_subscribe_and_draw_bbox()
     rospy.logwarn("Node `{}` stops.".format(node_name))
