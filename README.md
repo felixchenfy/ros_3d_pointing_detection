@@ -25,7 +25,7 @@ The workflow of this project is:
 4. The pointing direction(ray) is defined as the vector from shoulder to wrist.
 5. The 3D pixel that is in front of the hand and is very close to the pointing ray is where the person is pointing at. Backproject this 3D pixel to 2D image. If this 2D pixel is in one of the objects' bounding boxes, then we know the person is pointing at that object! Done!
 
-You may watch the video demo [here](https://github.com/felixchenfy/ros_3d_pointing_detection/blob/master/doc/video_demo/demo_no_hand.mp4). The annotations in the demo are described below:
+You may watch the video demo [here](https://github.com/felixchenfy/ros_3d_pointing_detection/blob/master/doc/video_demo/demo.mp4). The annotations in the demo are described below:
 
 ![](doc/video_demo/demo.gif)
 
