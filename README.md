@@ -3,15 +3,16 @@ ros_3d_pointing_detection
 Detect which object a person's right arm is pointing at.
   
 ![](doc/video_demo/demo.gif)
+''' TODO: Update Repo '''
 
 **Contents:**
 - [ros_3d_pointing_detection](#ros-3d-pointing-detection)
 - [1. Introduction](#1-introduction)
 - [2. Installation](#2-installation)
-  * [2.1. ros_openpose_rgbd](#21-ros-openpose-rgbd)
+  * [2.1. ros_openpose_rgbd (Another of my project)](#21-ros-openpose-rgbd)
   * [2.2. Openpose](#22-openpose)
   * [2.3. Darknet_ros(YOLO)](#23-darknet-ros-yolo-)
-  * [2.4. Rgbd Image Publisher](#24-rgbd-image-publisher)
+  * [2.4. Rgbd Image Publisher (Another of my project)](#24-rgbd-image-publisher)
 - [3. Usage](#3-usage)
 
 
@@ -25,7 +26,7 @@ The workflow of this project is:
 4. The pointing direction(ray) is defined as the vector from shoulder to wrist.
 5. The 3D pixel that is in front of the hand and is very close to the pointing ray is where the person is pointing at. Backproject this 3D pixel to 2D image. If this 2D pixel is in one of the objects' bounding boxes, then we know the person is pointing at that object! Done!
 
-You may watch the video demo [here](https://github.com/felixchenfy/ros_3d_pointing_detection/blob/master/doc/video_demo/demo.mp4). The annotations in the demo are described below:
+You may download the video demo [here](https://github.com/felixchenfy/ros_3d_pointing_detection/blob/master/doc/video_demo/demo.mp4) or watch the youtube [here](https://youtu.be/fKQgbHPsr0g). The annotations in the demo are described below:
 
 ![](doc/video_demo/demo.gif)
 
@@ -44,11 +45,11 @@ First, install some common python libraries:
 pip2 install --user open3d
 ```
 
-## 2.1. ros_openpose_rgbd
-
-This package uses Openpose and depth image to visualize the 3D humans joints in rviz. Please download it:
+## 2.1. Visualize 3D human skeleton in ROS Rviz
+The package is here https://github.com/felixchenfy/ros_openpose_rgbd. 
+It uses Openpose and depth image to visualize the 3D humans joints in rviz. Please download it:
 ```
-cd ~/catkin_ws/src # You catkin workspace.
+cd ~/catkin_ws/src # You catkin workspace. The dir name "catkin_ws" doesn't matter.
 git clone https://github.com/felixchenfy/ros_openpose_rgbd
 ```
 
@@ -111,3 +112,4 @@ If you want to read data from D435, you may replace step 1 with this command:
 ```
 roslaunch ros_3d_pointing_detection run_realsense.launch
 ```
+However, this project runs pretty slow -- about 5 frames/second on my RTX2070. If the code is rewrote in c++ instead of python, I think it can run in 10 fps. (TODOw)
