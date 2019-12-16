@@ -39,7 +39,7 @@ OBJECT_CLASSES = ["cup", "bowl", "banana", "laptop"]
 ''' ------------------------------ Command line inputs ------------------------------------ '''
 
 
-def parse_command_line_arguments():
+def parse_command_line_argumentp2_on_3d_line):
 
     parser = argparse.ArgumentParser(
         description="Detect human joints and then draw in rviz.",
