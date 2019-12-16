@@ -108,8 +108,11 @@ rosrun ros_3d_pointing_detection detect_and_draw_joints.py \
 
 The data publish rate is set as 1 image/second. Please read [launch/publish_test_rgbd_data.launch](launch/publish_test_rgbd_data.launch), and change publish settings in [config/publish_test_rgbd_data_config.yaml](config/publish_test_rgbd_data_config.yaml).
 
-If you want to read data from D435, you may replace step 1 with this command:
-```
-roslaunch ros_3d_pointing_detection run_realsense.launch
-```
-However, this project runs pretty slow -- about 5 frames/second on my RTX2070. If the code is rewrote in c++ instead of python, I think it can run in 10 fps. (TODOw)
+* Run on Realsense
+    If you want to read data from D435, you may replace step 1 with this command:
+    ```
+    roslaunch ros_3d_pointing_detection run_realsense.launch
+    ```
+
+* Speed
+    this project runs pretty slow -- Not real time, only 6 frames/second on my RTX2070. If the code is rewrote in c++ instead of python, it might be able to reach 10 fps.
