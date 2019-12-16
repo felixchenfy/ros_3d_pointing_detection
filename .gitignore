@@ -1,5 +1,6 @@
 *.pyc
 build/
+doc/
 .vscode/
 output
 data
